@@ -55,3 +55,4 @@ htmlcov/
 data/data.grib
 data/processed/
 checkpoints/*.pt
+checkpoints/
