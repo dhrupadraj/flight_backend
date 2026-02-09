@@ -4,6 +4,7 @@ Load wind data from GRIB file for PredRNN inference.
 Uses same preprocessing as training: 500 hPa u/v, normalization with mean/std.
 """
 import os
+from typing import Optional
 import numpy as np
 import xarray as xr
 GRIB_PATH = os.path.join(os.path.dirname(__file__), "data.grib")
@@ -13,8 +14,8 @@ LEVEL = 500  # hPa
 INPUT_STEPS = 12  # match training
 
 _cached_wind = None
-_cached_mean = None
-_cached_std = None
+_cached_mean: Optional[np.ndarray] = None
+_cached_std: Optional[np.ndarray] = None
 
 
 def _load_grib():
@@ -58,12 +59,14 @@ def _load_grib():
     return _cached_wind
 
 
-def _load_mean_std():
+def _load_mean_std() -> tuple[np.ndarray, np.ndarray]:
     """Load mean and std. Cached."""
     global _cached_mean, _cached_std
-    if _cached_mean is None:
+    if _cached_mean is None or _cached_std is None:
         _cached_mean = np.load(MEAN_PATH)
         _cached_std = np.load(STD_PATH)
+    if _cached_mean is None or _cached_std is None:
+        raise RuntimeError("Mean/std not loaded.")
     return _cached_mean, _cached_std
 
 

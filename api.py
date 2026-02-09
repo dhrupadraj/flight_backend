@@ -20,7 +20,10 @@ def health():
 @app.post("/optimize-route")
 def optimize_route(req: RouteRequest):
     try:
-        path, source, lat_min, lat_max, lon_min, lon_max = optimize_route_service(req)
+        result = optimize_route_service(req)
+        path = result["path"]
+        source = result["data_source"]
+        bounds = result["bounds"]
 
         if not path:
             raise HTTPException(status_code=404, detail="No optimized path found")
@@ -35,10 +38,10 @@ def optimize_route(req: RouteRequest):
             ],
             "num_waypoints": len(path),
             "region_bounds": {
-                "lat_min": lat_min,
-                "lat_max": lat_max,
-                "lon_min": lon_min,
-                "lon_max": lon_max,
+                "lat_min": bounds["lat_min"],
+                "lat_max": bounds["lat_max"],
+                "lon_min": bounds["lon_min"],
+                "lon_max": bounds["lon_max"],
             }
         }
     except Exception as e:
