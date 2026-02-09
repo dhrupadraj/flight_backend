@@ -23,9 +23,6 @@ def _load_grib():
     global _cached_wind
     if _cached_wind is not None:
         return _cached_wind
-
-    import xarray as xr
-
     # Use a context manager (with) to ensure the file closes after reading values
     try:
         with xr.open_dataset(
