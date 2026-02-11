@@ -1,0 +1,24 @@
+.git
+.gitignore
+.DS_Store
+# Local Python environments
+venv/
+.venv/
+env/
+ENV/
+# Python cache/build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+# IDE/editor
+.idea/
+.vscode/
+# Notebook caches
+.ipynb_checkpoints/
