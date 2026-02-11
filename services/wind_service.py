@@ -1,16 +1,13 @@
 import numpy as np
 import logging
 from utils.map import generate_synthetic_wind_field
-from data import (
-    get_wind_history_for_region,
-    get_wind_field_for_display,
-    _load_mean_std
-)
 
 logger = logging.getLogger("uvicorn.error")
 
 def load_wind_history(lat_min, lat_max, lon_min, lon_max, H, W, Tin, target_datetime):
     try:
+        from data import get_wind_history_for_region
+
         wind = get_wind_history_for_region(
             lat_min, lat_max, lon_min, lon_max,
             target_h=H, target_w=W,
@@ -28,6 +25,8 @@ def load_wind_history(lat_min, lat_max, lon_min, lon_max, H, W, Tin, target_date
             [np.stack([u, v], axis=0)] * Tin, axis=0
         ).astype(np.float32)
 
+        from data import _load_mean_std
+
         mean, std = _load_mean_std()
         return (wind_raw - mean) / (std + 1e-6), "synthetic"
 
@@ -38,6 +37,8 @@ def get_wind_field_for_display_service(lat_min, lat_max, lon_min, lon_max, grid_
     Returns (u, v, lat_mesh, lon_mesh, source).
     """
     try:
+        from data import get_wind_field_for_display
+
         u, v, lat_mesh, lon_mesh = get_wind_field_for_display(
             lat_min, lat_max, lon_min, lon_max, grid_size=grid_size
         )

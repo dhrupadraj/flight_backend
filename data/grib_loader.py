@@ -16,6 +16,7 @@ INPUT_STEPS = 12  # match training
 _cached_wind = None
 _cached_mean: Optional[np.ndarray] = None
 _cached_std: Optional[np.ndarray] = None
+_resample_plan_cache = {}
 
 
 def _load_grib():
@@ -50,10 +51,109 @@ def _load_grib():
         u = u[:, ::-1, :]
         v = v[:, ::-1, :]
         lat = lat[::-1]
+    if lon[0] > lon[-1]:
+        u = u[:, :, ::-1]
+        v = v[:, :, ::-1]
+        lon = lon[::-1]
         
     wind = np.stack([u, v], axis=1)  # (T, 2, H, W)
     _cached_wind = (wind, lat, lon, grib_times)
     return _cached_wind
+
+
+def _make_cache_key(src_lat, src_lon, dst_lat, dst_lon):
+    return (
+        float(src_lat[0]),
+        float(src_lat[-1]),
+        len(src_lat),
+        float(src_lon[0]),
+        float(src_lon[-1]),
+        len(src_lon),
+        float(dst_lat[0]),
+        float(dst_lat[-1]),
+        len(dst_lat),
+        float(dst_lon[0]),
+        float(dst_lon[-1]),
+        len(dst_lon),
+    )
+
+
+def _get_resample_plan(src_lat, src_lon, dst_lat, dst_lon):
+    """Build/cached bilinear interpolation indices and weights for a fixed grid pair."""
+    key = _make_cache_key(src_lat, src_lon, dst_lat, dst_lon)
+    plan = _resample_plan_cache.get(key)
+    if plan is not None:
+        return plan
+
+    src_lat = np.asarray(src_lat, dtype=np.float64)
+    src_lon = np.asarray(src_lon, dtype=np.float64)
+    dst_lat = np.asarray(dst_lat, dtype=np.float64)
+    dst_lon = np.asarray(dst_lon, dtype=np.float64)
+
+    lat_i1 = np.searchsorted(src_lat, dst_lat, side="right")
+    lon_j1 = np.searchsorted(src_lon, dst_lon, side="right")
+
+    valid_lat = (dst_lat >= src_lat[0]) & (dst_lat <= src_lat[-1])
+    valid_lon = (dst_lon >= src_lon[0]) & (dst_lon <= src_lon[-1])
+
+    lat_i1 = np.clip(lat_i1, 1, len(src_lat) - 1)
+    lon_j1 = np.clip(lon_j1, 1, len(src_lon) - 1)
+    lat_i0 = lat_i1 - 1
+    lon_j0 = lon_j1 - 1
+
+    lat0 = src_lat[lat_i0]
+    lat1 = src_lat[lat_i1]
+    lon0 = src_lon[lon_j0]
+    lon1 = src_lon[lon_j1]
+
+    lat_den = np.maximum(lat1 - lat0, 1e-12)
+    lon_den = np.maximum(lon1 - lon0, 1e-12)
+
+    wy = (dst_lat - lat0) / lat_den
+    wx = (dst_lon - lon0) / lon_den
+    wy = np.clip(wy, 0.0, 1.0).astype(np.float32)
+    wx = np.clip(wx, 0.0, 1.0).astype(np.float32)
+
+    plan = {
+        "lat_i0": lat_i0,
+        "lat_i1": lat_i1,
+        "lon_j0": lon_j0,
+        "lon_j1": lon_j1,
+        "wy": wy,
+        "wx": wx,
+        "valid_lat": valid_lat,
+        "valid_lon": valid_lon,
+    }
+    _resample_plan_cache[key] = plan
+    return plan
+
+
+def _bilinear_resample(data: np.ndarray, src_lat, src_lon, dst_lat, dst_lon) -> np.ndarray:
+    """
+    Vectorized bilinear resampling on rectilinear grids.
+    data: (..., H, W)
+    returns: (..., dst_h, dst_w)
+    """
+    plan = _get_resample_plan(src_lat, src_lon, dst_lat, dst_lon)
+
+    row0 = np.take(data, plan["lat_i0"], axis=-2)
+    row1 = np.take(data, plan["lat_i1"], axis=-2)
+    v00 = np.take(row0, plan["lon_j0"], axis=-1)
+    v01 = np.take(row0, plan["lon_j1"], axis=-1)
+    v10 = np.take(row1, plan["lon_j0"], axis=-1)
+    v11 = np.take(row1, plan["lon_j1"], axis=-1)
+
+    wy = plan["wy"].reshape((1,) * (data.ndim - 2) + (-1, 1))
+    wx = plan["wx"].reshape((1,) * (data.ndim - 2) + (1, -1))
+
+    top = v00 * (1.0 - wx) + v01 * wx
+    bottom = v10 * (1.0 - wx) + v11 * wx
+    out = top * (1.0 - wy) + bottom * wy
+
+    valid = np.outer(plan["valid_lat"], plan["valid_lon"])
+    valid = valid.reshape((1,) * (data.ndim - 2) + valid.shape)
+    out = np.where(valid, out, 0.0)
+    return out.astype(np.float32, copy=False)
 
 
 def _load_mean_std() -> tuple[np.ndarray, np.ndarray]:
@@ -69,31 +169,19 @@ def _load_mean_std() -> tuple[np.ndarray, np.ndarray]:
 
 def _resample_to_grid(data, src_lat, src_lon, dst_lat, dst_lon):
     """Resample 2D or 3D data from src grid to dst grid via linear interpolation."""
-    from scipy.interpolate import RegularGridInterpolator
-
     if data.ndim == 2:
         data = data[np.newaxis, ...]
         squeeze = True
     else:
         squeeze = False
 
-    n_t, *spatial = data.shape
-    dst_h, dst_w = len(dst_lat), len(dst_lon)
-    dst_lon_2d, dst_lat_2d = np.meshgrid(dst_lon, dst_lat)
-
-    out = np.zeros((n_t, dst_h, dst_w), dtype=np.float32)
-    for t in range(n_t):
-        interp = RegularGridInterpolator(
-            (src_lat, src_lon),
-            data[t],
-            method="linear",
-            bounds_error=False,
-            fill_value=np.nan,
-        )
-        pts = np.column_stack([dst_lat_2d.ravel(), dst_lon_2d.ravel()])
-        out[t] = interp(pts).reshape(dst_h, dst_w)
-        if np.any(np.isnan(out[t])):
-            out[t] = np.nan_to_num(out[t], nan=0.0)
+    out = _bilinear_resample(
+        np.asarray(data, dtype=np.float32),
+        src_lat,
+        src_lon,
+        dst_lat,
+        dst_lon,
+    )
 
     if squeeze:
         out = out[0]
@@ -146,27 +234,16 @@ def get_wind_history_for_region(
        lon_min < grib_lon_min or lon_max > grib_lon_max:
          raise ValueError(f"Region ({lat_min}, {lon_min}) outside GRIB domain")
 
-    # 5. Resampling (Tin, 2, H, W) - Optimized: batch resample
+    # 5. Resampling (Tin, 2, H, W)
     dst_lat = np.linspace(lat_min, lat_max, target_h)
     dst_lon = np.linspace(lon_min, lon_max, target_w)
-    
-    # Create interpolator once and reuse for all timesteps/channels
-    from scipy.interpolate import RegularGridInterpolator
-    dst_lon_2d, dst_lat_2d = np.meshgrid(dst_lon, dst_lat)
-    pts = np.column_stack([dst_lat_2d.ravel(), dst_lon_2d.ravel()])
-    
-    resampled = np.zeros((num_timesteps, 2, target_h, target_w), dtype=np.float32)
-    for t in range(num_timesteps):
-        for c in range(2):
-            # Reuse interpolator creation for better performance
-            interp = RegularGridInterpolator(
-                (grib_lat, grib_lon),
-                wind_slice[t, c],
-                method="linear",
-                bounds_error=False,
-                fill_value=0.0,  # Use 0.0 instead of nan for faster processing
-            )
-            resampled[t, c] = interp(pts).reshape(target_h, target_w)
+    resampled = _bilinear_resample(
+        np.asarray(wind_slice, dtype=np.float32),
+        grib_lat,
+        grib_lon,
+        dst_lat,
+        dst_lon,
+    )
 
     # 6. Final Normalization
     norm = (resampled - mean) / (std + 1e-6)

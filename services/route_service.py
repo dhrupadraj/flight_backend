@@ -1,7 +1,6 @@
 import numpy as np
 from utils.map import generate_latlon_grid
 from datetime import datetime
-from data import denormalize_wind
 from services.wind_service import load_wind_history
 from services.predrnn_service import predict_wind
 from services.astar_service import find_optimized_path
@@ -14,6 +13,7 @@ def get_nearest_index(target_lat, target_lon, lat_grid, lon_grid):
 
 
 def optimize_route_service(req):
+    from data import denormalize_wind
 
     dt_str = f"{req.flight_date} {req.departure_time}"
     try:
