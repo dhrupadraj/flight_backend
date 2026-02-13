@@ -1,4 +1,4 @@
-.git
+.git/
 .gitignore
 .DS_Store
 # Local Python environments
@@ -22,3 +22,5 @@ dist/
 .vscode/
 # Notebook caches
 .ipynb_checkpoints/
+# Ignore GRIB index files
+**/*.idx
