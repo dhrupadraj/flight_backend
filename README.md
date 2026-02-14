@@ -1,4 +1,4 @@
-# AI Flight Route Optimization System
+# AI Flight Route Optimization System( This is the Backend folder created specifically for deployment of the API through seperation of concerns following industry standards) [Main repo containing both frontend and backend](https://github.com/dhrupadraj/flight_path_optimization.git)
 
 An end‑to‑end intelligent flight routing platform that predicts future wind conditions using deep learning and computes time and fuel‑efficient flight paths between airports inside the indian airspace .
 
