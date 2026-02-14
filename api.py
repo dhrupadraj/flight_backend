@@ -3,9 +3,18 @@ from schemas import RouteRequest
 from services.route_service import optimize_route_service
 from services.wind_service import get_wind_field_for_display_service
 from data import _load_grib
+from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # This allows ALL origins
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -46,7 +55,10 @@ def optimize_route(req: RouteRequest):
                 "lon_max": bounds["lon_max"],
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("Unhandled error in /optimize-route")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/grib-bounds")
@@ -71,6 +83,8 @@ def get_grib_bounds():
                 "num_timesteps": int(len(grib_times))
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting GRIB bounds: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading GRIB file: {str(e)}")
@@ -100,5 +114,8 @@ def wind_field(req: RouteRequest):
             "wind_u": u.tolist(),
             "wind_v": v.tolist(),
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("Unhandled error in /wind-field")
         raise HTTPException(status_code=500, detail=str(e))

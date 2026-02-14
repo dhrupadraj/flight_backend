@@ -55,5 +55,4 @@ htmlcov/
 data/data.grib
 data/processed/
 checkpoints/*.pt
-checkpoints/
 data/data.grib.da267.idx
