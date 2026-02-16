@@ -1,4 +1,4 @@
-# AI Flight Route Optimization System( This is the Backend folder created specifically for deployment of the API through seperation of concerns following industry standards) [Main repo containing both frontend and backend](https://github.com/dhrupadraj/flight_path_optimization.git)
+# AI Flight Route Optimization System( This is the Backend folder created specifically for deployment of the API through seperation of concerns following industry standards) click here --> [Main repo containing both frontend and backend](https://github.com/dhrupadraj/flight_path_optimization.git)
 
 An end‑to‑end intelligent flight routing platform that predicts future wind conditions using deep learning and computes time and fuel‑efficient flight paths between airports inside the indian airspace .
 
@@ -6,10 +6,10 @@ The system combines spatiotemporal weather forecasting using PredRNN and reverse
 
 ---
 
-## Live streamlit Application
+## Live backend api link
 
-[backend api](http://16.176.208.177:8000)
-[streamlit app](https://dhrupadraj-flight-path-optimization-app-3vctir.streamlit.app/)
+click here --> [backend api](http://16.176.208.177:8000/docs)
+
 
 ---
 
@@ -171,6 +171,9 @@ Ongoing improvements:
 * Multi‑altitude optimization
 
 ---
+
+## Note
+ERA5 grib dataset is not included in the git Repo due to its large size(>250 MB)
 
 ## Author
 
